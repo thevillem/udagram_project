@@ -78,7 +78,6 @@ Resources:
   WebBootstrap:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
-      KeyName: "udacity"
       IamInstanceProfile: !Ref ProfileWithRolesForApp
       UserData:
         Fn::Base64:
