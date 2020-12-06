@@ -1,0 +1,26 @@
+[
+    {
+      "ParameterKey": "ProjectName",
+      "ParameterValue": "udacity-iac"
+    },
+    {
+      "ParameterKey": "VPCCIDR",
+      "ParameterValue": "10.0.0.0/16"
+    },
+    {
+      "ParameterKey": "PubSub1",
+      "ParameterValue": "10.0.0.0/24"
+    },
+    {
+      "ParameterKey": "PubSub2",
+      "ParameterValue": "10.0.1.0/24"
+    },
+    {
+      "ParameterKey": "PrivSub1",
+      "ParameterValue": "10.0.2.0/24"
+    },
+    {
+      "ParameterKey": "PrivSub2",
+      "ParameterValue": "10.0.3.0/24"
+    }
+  ]

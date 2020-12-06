@@ -1,11 +1,11 @@
 # Udagram Project
 
-Terraform code for deploying the Cloud DevOps Engineer project #2.
+Cloudformation templates for deploying the Cloud DevOps Engineer project #3.
 
 ## Requires
 
 ```
- terraform >= 0.13
+ awscli
 ```
 
 ## Running
@@ -13,18 +13,22 @@ Terraform code for deploying the Cloud DevOps Engineer project #2.
 You must have a preconfigured AWS Access ID and Secret Key in order to run the scripts.
 
 ```bash
-# This will download the necessary modules and providers.
-terraform init
+# This will setup and configure our network stack to setup for server deployment.
+aws cloudformation create-stack --stack-name udacity-network --template-body file://networks.yml --parameters file://network-parameters.json --region=us-east-2
 
-# We now will plan out our deployment
-terraform plan -out ./tfplan
-
-# Apply the plan we just generated
-terraform apply ./tfplan
+# This will setup and configure our server stacks.
+aws cloudformation create-stack --stack-name udacity-server --template-body file://servers.yml --parameters file://server-parameters.json --region=us-east-2 --capabilities CAPABILITY_IAM
 ```
 
-## Output
+## Cleaning Up
+To remove the stacks, run the following commands in order to first remove the server stacks and then the network stacks.
 
-On deployment the scripts will output the DNS name of the Elastic Load Balancer.
+```bash
+# Deletes the udacity-server stack
+aws cloudformation delete-stack --stack-name udacity-server --region=us-east-2
 
-It might take a few minutes for the site to come up fully, so please be patient.
+# Deletes the udacity-network stack
+aws cloudformation delete-stack --stack-name udacity-network --region=us-east-2
+
+```
+

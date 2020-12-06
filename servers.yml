@@ -1,0 +1,171 @@
+Description: >
+   This template produces servers for Project 3 of Udacity Cloud DevOps Engineer
+
+Parameters:
+  ProjectName:
+    Description: An environment that will be prefixed to resources
+    Type: String
+
+  SSHLocation: 
+    Description: "The IP address range that can be used to SSH to the EC2 instances"
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    Default: "0.0.0.0/0"
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "must be a valid IP CIDR range of the form x.x.x.x/x."
+
+Resources:
+  LBSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to our load balancer from the internet
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${ProjectName}-vpcid"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+
+  WebServerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to our hosts and SSH from local only
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${ProjectName}-vpcid"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+
+  UdacityS3ReadOnlyEC2:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns: 
+        - "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+
+  ProfileWithRolesForApp: 
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      Path: "/"
+      Roles: 
+        - !Ref UdacityS3ReadOnlyEC2
+
+  WebBootstrap:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      KeyName: "udacity"
+      IamInstanceProfile: !Ref ProfileWithRolesForApp
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+           - ''
+           - - "#!/bin/bash \n"
+             - "apt-get update -y \n"
+             - "apt-get install unzip awscli -y \n"
+             - "apt-get install apache2 -y \n"
+             - "systemctl start apache2.service \n"
+             - "cd /var/www/html \n "
+             - "aws s3 cp s3://udacity-demo-1/udacity.zip . \n"
+             - "unzip -o udacity.zip \n"
+      ImageId: ami-0a91cd140a1fc148a
+      SecurityGroups:
+      - Ref: WebServerSG
+      InstanceType: t3.medium
+      BlockDeviceMappings:
+      - DeviceName: "/dev/sdk"
+        Ebs:
+          VolumeSize: '10'
+  
+  WebASGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+      - Fn::ImportValue:
+          !Sub "${ProjectName}-privatenets"
+      LaunchConfigurationName:
+        Ref: WebBootstrap
+      MinSize: '3'
+      MaxSize: '5'
+      TargetGroupARNs:
+      - Ref: WebTargetGroup
+
+  WebLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Tags:
+        - Key: Project
+          Value: !Sub ${ProjectName}
+      Subnets:
+      - Fn::ImportValue: !Sub "${ProjectName}-public1"
+      - Fn::ImportValue: !Sub "${ProjectName}-public2"
+      SecurityGroups:
+      - Ref: LBSecGroup
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: WebTargetGroup
+      LoadBalancerArn: !Ref WebLoadBalancer
+      Port: '80'
+      Protocol: HTTP
+
+  ALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref 'WebTargetGroup'
+      Conditions:
+      - Field: path-pattern
+        Values: [/]
+      ListenerArn: !Ref 'Listener'
+      Priority: 1
+
+  WebTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 8
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${ProjectName}-vpcid"
+          
+Outputs:
+  LoadBalancerDNS:
+    Value: !Join [ "", [ 'http://', !GetAtt WebLoadBalancer.DNSName ]]
+    Export:
+      Name: "DNS-URL" 
